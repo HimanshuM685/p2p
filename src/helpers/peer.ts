@@ -3,6 +3,8 @@ import { message } from "antd";
 
 export enum DataType {
     FILE = 'FILE',
+    FILE_CHUNK = 'FILE_CHUNK',
+    FILE_COMPLETE = 'FILE_COMPLETE',
     OTHER = 'OTHER'
 }
 
@@ -12,6 +14,10 @@ export interface Data {
     fileName?: string;
     fileType?: string;
     message?: string;
+    // Chunk metadata
+    chunkIndex?: number;
+    totalChunks?: number;
+    fileId?: string; // To identify chunks belonging to the same file
 }
 
 let peer: Peer | undefined;
@@ -126,29 +132,57 @@ export const PeerConnection = {
             let conn = connectionMap.get(id);
             if (conn) {
                 const chunkSize = 16 * 1024; // 16KB
-                const file = data.file as Blob;
-                const totalChunks = Math.ceil(file.size / chunkSize);
-                let currentChunk = 0;
+                
+                // Only chunk if it's a file and larger than chunkSize
+                if (data.dataType === DataType.FILE && data.file && data.file.size > chunkSize) {
+                    const file = data.file as Blob;
+                    const totalChunks = Math.ceil(file.size / chunkSize);
+                    let currentChunk = 0;
+                    const fileId = Date.now().toString(); // Simple unique ID for the file
+                    
+                    // First send metadata to prepare receiver
+                    conn.send({
+                        dataType: DataType.FILE_CHUNK,
+                        fileName: data.fileName,
+                        fileType: data.fileType,
+                        fileId: fileId,
+                        totalChunks: totalChunks
+                    });
 
-                const sendChunk = () => {
-                    if (currentChunk < totalChunks) {
-                        const start = currentChunk * chunkSize;
-                        const end = Math.min(start + chunkSize, file.size);
-                        const chunk = file.slice(start, end);
-                        if (conn) {
-                            conn.send({ ...data, file: chunk });
-                            currentChunk++;
-                            onProgress((currentChunk / totalChunks) * 100);
-                            setTimeout(sendChunk, 100); // Simulate network delay
+                    const sendChunk = () => {
+                        if (currentChunk < totalChunks) {
+                            const start = currentChunk * chunkSize;
+                            const end = Math.min(start + chunkSize, file.size);
+                            const chunk = file.slice(start, end);
+                            
+                            if (conn) {
+                                conn.send({
+                                    dataType: DataType.FILE_CHUNK,
+                                    file: chunk,
+                                    chunkIndex: currentChunk,
+                                    totalChunks: totalChunks,
+                                    fileId: fileId
+                                });
+                                currentChunk++;
+                                onProgress((currentChunk / totalChunks) * 100);
+                                setTimeout(sendChunk, 100); // Simulate network delay
+                            } else {
+                                reject(new Error("Connection lost"));
+                            }
                         } else {
-                            reject(new Error("Connection lost"));
+                            conn.send({
+                                dataType: DataType.FILE_COMPLETE,
+                                fileId: fileId
+                            });
+                            resolve();
                         }
-                    } else {
-                        resolve();
-                    }
-                };
+                    };
 
-                sendChunk();
+                    sendChunk();
+                } else {
+                    conn.send(data);
+                    resolve();
+                }
             } else {
                 reject(new Error("Connection didn't exist"));
             }

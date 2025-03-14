@@ -4,6 +4,7 @@ import {DataType, PeerConnection} from "../../helpers/peer";
 import {message} from "antd";
 import {addConnectionList, removeConnectionList} from "../connection/connectionActions";
 import download from "js-file-download";
+import { FileChunkManager } from "../../helpers/fileChunkManager";
 
 export const startPeerSession = (id: string) => ({
     type: PeerActionType.PEER_SESSION_START, id
@@ -29,13 +30,54 @@ export const startPeer: () => (dispatch: Dispatch) => Promise<void>
                 message.info("Connection closed: " + peerId)
                 dispatch(removeConnectionList(peerId))
             })
-            PeerConnection.onConnectionReceiveData(peerId, (file) => {
-                message.info("Receiving file " + file.fileName + " from " + peerId)
-                if (file.dataType === DataType.FILE) {
-                    download(file.file || '', file.fileName || "fileName", file.fileType)
+            
+            PeerConnection.onConnectionReceiveData(peerId, (data) => {
+                const fileManager = FileChunkManager.getInstance();
+                
+                if (data.dataType === DataType.FILE) {
+                    // Handle simple file download (small files)
+                    message.info("Receiving file " + data.fileName + " from " + peerId)
+                    download(data.file || '', data.fileName || "fileName", data.fileType)
+                } 
+                else if (data.dataType === DataType.FILE_CHUNK && data.fileId) {
+                    // First chunk with metadata only
+                    if (data.chunkIndex === undefined && data.totalChunks) {
+                        fileManager.initFileTransfer(
+                            data.fileId,
+                            data.fileName || "unknown",
+                            data.fileType || "application/octet-stream",
+                            data.totalChunks
+                        );
+                        message.info(`Starting to receive "${data.fileName}" from ${peerId}`);
+                    }
+                    // Handle chunk of a larger file
+                    else if (data.chunkIndex !== undefined && data.file) {
+                        const isComplete = fileManager.addChunk(data.fileId, data.chunkIndex, data.file);
+                        
+                        // Show progress for large files
+                        if (data.totalChunks && data.totalChunks > 10) {
+                            const progress = Math.round((data.chunkIndex / data.totalChunks) * 100);
+                            if (progress % 20 === 0) { // Show at 20% intervals
+                                message.info(`Receiving "${data.fileName}": ${progress}% complete`);
+                            }
+                        }
+                    }
+                }
+                else if (data.dataType === DataType.FILE_COMPLETE && data.fileId) {
+                    // File transfer completed
+                    const fileManager = FileChunkManager.getInstance();
+                    fileManager.assembleAndDownloadFile(data.fileId)
+                        .then(success => {
+                            if (success) {
+                                message.success(`File "${data.fileName}" downloaded successfully`);
+                            } else {
+                                message.error(`Error downloading file "${data.fileName}"`);
+                            }
+                        });
                 }
             })
         })
+        
         dispatch(startPeerSession(id))
         dispatch(setLoading(false))
     } catch (err) {
