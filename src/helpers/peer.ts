@@ -127,64 +127,72 @@ export const PeerConnection = {
     sendConnection: (id: string, data: Data, onProgress: (progress: number) => void): Promise<void> => new Promise((resolve, reject) => {
         if (!connectionMap.has(id)) {
             reject(new Error("Connection didn't exist"));
+            return; // Add early return
         }
         try {
             let conn = connectionMap.get(id);
-            if (conn) {
-                const chunkSize = 16 * 1024; // 16KB
+            if (!conn) { // More explicit check
+                reject(new Error("Connection didn't exist"));
+                return;
+            }
+            
+            const chunkSize = 16 * 1024; // 16KB
+            
+            // Only chunk if it's a file and larger than chunkSize
+            if (data.dataType === DataType.FILE && data.file && data.file.size > chunkSize) {
+                const file = data.file as Blob;
+                const totalChunks = Math.ceil(file.size / chunkSize);
+                let currentChunk = 0;
+                const fileId = Date.now().toString(); // Simple unique ID for the file
                 
-                // Only chunk if it's a file and larger than chunkSize
-                if (data.dataType === DataType.FILE && data.file && data.file.size > chunkSize) {
-                    const file = data.file as Blob;
-                    const totalChunks = Math.ceil(file.size / chunkSize);
-                    let currentChunk = 0;
-                    const fileId = Date.now().toString(); // Simple unique ID for the file
-                    
-                    // First send metadata to prepare receiver
-                    conn.send({
-                        dataType: DataType.FILE_CHUNK,
-                        fileName: data.fileName,
-                        fileType: data.fileType,
-                        fileId: fileId,
-                        totalChunks: totalChunks
-                    });
+                // First send metadata to prepare receiver
+                conn.send({
+                    dataType: DataType.FILE_CHUNK,
+                    fileName: data.fileName,
+                    fileType: data.fileType,
+                    fileId: fileId,
+                    totalChunks: totalChunks
+                });
 
-                    const sendChunk = () => {
-                        if (currentChunk < totalChunks) {
-                            const start = currentChunk * chunkSize;
-                            const end = Math.min(start + chunkSize, file.size);
-                            const chunk = file.slice(start, end);
-                            
-                            if (conn) {
-                                conn.send({
-                                    dataType: DataType.FILE_CHUNK,
-                                    file: chunk,
-                                    chunkIndex: currentChunk,
-                                    totalChunks: totalChunks,
-                                    fileId: fileId
-                                });
-                                currentChunk++;
-                                onProgress((currentChunk / totalChunks) * 100);
-                                setTimeout(sendChunk, 100); // Simulate network delay
-                            } else {
-                                reject(new Error("Connection lost"));
-                            }
+                const sendChunk = () => {
+                    if (currentChunk < totalChunks) {
+                        const start = currentChunk * chunkSize;
+                        const end = Math.min(start + chunkSize, file.size);
+                        const chunk = file.slice(start, end);
+                        
+                        if (conn) {
+                            conn.send({
+                                dataType: DataType.FILE_CHUNK,
+                                file: chunk,
+                                chunkIndex: currentChunk,
+                                totalChunks: totalChunks,
+                                fileId: fileId
+                            });
+                            currentChunk++;
+                            onProgress((currentChunk / totalChunks) * 100);
+                            setTimeout(sendChunk, 100); // Simulate network delay
                         } else {
+                            reject(new Error("Connection lost"));
+                        }
+                    } else {
+                        // Fix: Add null check before using conn
+                        if (conn) {  // <- Add this check
                             conn.send({
                                 dataType: DataType.FILE_COMPLETE,
                                 fileId: fileId
                             });
                             resolve();
+                        } else {
+                            reject(new Error("Connection lost"));
                         }
-                    };
+                    }
+                };
 
-                    sendChunk();
-                } else {
-                    conn.send(data);
-                    resolve();
-                }
+                sendChunk();
             } else {
-                reject(new Error("Connection didn't exist"));
+                conn.send(data);
+                onProgress(100);
+                resolve();
             }
         } catch (err) {
             reject(err);
