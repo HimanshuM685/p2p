@@ -35,12 +35,12 @@ export const startPeer: () => (dispatch: Dispatch) => Promise<void>
                 const fileManager = FileChunkManager.getInstance();
                 
                 if (data.dataType === DataType.FILE) {
-                    // Handle simple file download (small files)
+                    // for small files
                     message.info("Receiving file " + data.fileName + " from " + peerId)
                     download(data.file || '', data.fileName || "fileName", data.fileType)
                 } 
                 else if (data.dataType === DataType.FILE_CHUNK && data.fileId) {
-                    // First chunk with metadata only
+                    // 1st chunk with metadata only
                     if (data.chunkIndex === undefined && data.totalChunks) {
                         fileManager.initFileTransfer(
                             data.fileId,
@@ -50,21 +50,21 @@ export const startPeer: () => (dispatch: Dispatch) => Promise<void>
                         );
                         message.info(`Starting to receive "${data.fileName}" from ${peerId}`);
                     }
-                    // Handle chunk of a larger file
+                    // for larger file
                     else if (data.chunkIndex !== undefined && data.file) {
                         const isComplete = fileManager.addChunk(data.fileId, data.chunkIndex, data.file);
                         
-                        // Show progress for large files
+                        // progress for large files
                         if (data.totalChunks && data.totalChunks > 10) {
                             const progress = Math.round((data.chunkIndex / data.totalChunks) * 100);
-                            if (progress % 20 === 0) { // Show at 20% intervals
+                            if (progress % 2 === 0) { // for every 2% progress
                                 message.info(`Receiving "${data.fileName}": ${progress}% complete`);
                             }
                         }
                     }
                 }
                 else if (data.dataType === DataType.FILE_COMPLETE && data.fileId) {
-                    // File transfer completed
+                    // transfer completed
                     const fileManager = FileChunkManager.getInstance();
                     fileManager.assembleAndDownloadFile(data.fileId)
                         .then(success => {

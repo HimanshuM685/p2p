@@ -1,9 +1,5 @@
 import download from "js-file-download";
 
-interface FileChunk {
-    chunk: Blob;
-    index: number;
-}
 
 interface ChunkedFile {
     fileName: string;

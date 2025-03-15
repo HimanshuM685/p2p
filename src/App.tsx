@@ -6,7 +6,7 @@ import { startPeer, stopPeerSession } from "./store/peer/peerActions";
 import * as connectionAction from "./store/connection/connectionActions";
 import { DataType, PeerConnection } from "./helpers/peer";
 import { useAsyncState } from "./helpers/hooks";
-import { EncryptionManager } from "./helpers/encryption";  // <-- import encryption
+import { EncryptionManager } from "./helpers/encryption";
 
 const { Title } = Typography;
 type MenuItem = Required<MenuProps>['items'][number];
@@ -63,24 +63,24 @@ export const App: React.FC = () => {
             const encryptionManager = EncryptionManager.getInstance();
             const file = fileList[0] as unknown as File;
             
-            // Generate key and store for receiver
+            // keygen for receiver
             const key = await encryptionManager.generateKey();
             encryptionManager.storeKeyForPeer(connection.selectedId, key);
             const exportedKey = await encryptionManager.exportKey(key);
             
-            // First, send a key exchange message
+            // key exchange 
             await PeerConnection.sendConnection(connection.selectedId, {
                 dataType: DataType.KEY_EXCHANGE,
                 encryptionKey: exportedKey,
                 fileName: file.name
             }, () => {});  // No progress callback for key exchange
             
-            // Encrypt file
+            // encrypt file
             const fileBuffer = await file.arrayBuffer();
             const { encrypted, iv } = await encryptionManager.encryptData(fileBuffer, key);
             const encryptedBlob = new Blob([encrypted], { type: file.type });
             
-            // Send encrypted file
+            // sending the  encrypted file
             await PeerConnection.sendConnection(connection.selectedId, {
                 dataType: DataType.FILE,
                 file: encryptedBlob,

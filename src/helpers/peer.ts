@@ -149,7 +149,6 @@ export const PeerConnection = {
                 return;
             }
             
-            // If the file is encrypted, send it directly without chunking.
             if (data.dataType === DataType.FILE && data.encrypted && data.file) {
                 conn.send(data);
                 onProgress(100);
@@ -157,17 +156,16 @@ export const PeerConnection = {
                 return;
             }
             
-            const chunkSize = 16 * 1024; // 16KB
+            const chunkSize = 16 * 1024;
             
-            // Only chunk if it's a file and larger than chunkSize
             if (data.dataType === DataType.FILE && data.file && data.file.size > chunkSize) {
                 const file = data.file as Blob;
                 const totalChunks = Math.ceil(file.size / chunkSize);
                 let currentChunk = 0;
-                // Generate a short, unique 8-character file ID
+               
+                
                 const fileId = Math.random().toString(36).substring(2, 10);
                 
-                // First send metadata to prepare receiver
                 conn.send({
                     dataType: DataType.FILE_CHUNK,
                     fileName: data.fileName,
@@ -192,7 +190,7 @@ export const PeerConnection = {
                             });
                             currentChunk++;
                             onProgress((currentChunk / totalChunks) * 100);
-                            setTimeout(sendChunk, 100); // Simulate network delay
+                            setTimeout(sendChunk, 100);
                         } else {
                             reject(new Error("Connection lost"));
                         }
@@ -211,7 +209,6 @@ export const PeerConnection = {
 
                 sendChunk();
             } else {
-                // For non-chunked data (non-encrypted or small file), send the data as is.
                 conn.send(data);
                 onProgress(100);
                 resolve();
@@ -232,14 +229,12 @@ export const PeerConnection = {
             conn.on('data', function (receivedData) {
                 console.log("Receiving data from " + id);
                 const data = receivedData as Data;
-                // Handle key exchange
+
                 if (data.dataType === DataType.KEY_EXCHANGE && data.encryptionKey) {
                     (async () => {
                         const encryptionManager = EncryptionManager.getInstance();
-                        // Ensure encryptionKey is an ArrayBuffer
                         let keyBuffer = data.encryptionKey;
                         if (!(keyBuffer instanceof ArrayBuffer)) {
-                            // Convert plain object to Uint8Array then get its buffer
                             if (keyBuffer) {
                                 keyBuffer = Uint8Array.from(Object.values(keyBuffer)).buffer;
                             } else {
@@ -251,12 +246,10 @@ export const PeerConnection = {
                         message.info(`Received encryption key for file "${data.fileName}"`);
                     })();
                 }
-                // Handle encrypted file download
                 else if (data.dataType === DataType.FILE && data.encrypted && data.iv && data.file) {
                     (async () => {
                         const encryptionManager = EncryptionManager.getInstance();
                         let iv = data.iv;
-                        // Ensure iv is a Uint8Array
                         if (!(iv instanceof Uint8Array)) {
                             if (iv) {
                                 iv = new Uint8Array(Object.values(iv));
@@ -266,7 +259,6 @@ export const PeerConnection = {
                         }
                         const key = encryptionManager.getKeyForPeer(id);
                         if (key) {
-                            // If data.file doesn't have arrayBuffer(), create a Blob from it.
                             if (!data.file) {
                                 throw new Error("File is undefined");
                             }
@@ -292,7 +284,6 @@ export const PeerConnection = {
                         }
                     })();
                 } else {
-                    // For all other data types, call the provided callback.
                     callback(data);
                 }
             });
