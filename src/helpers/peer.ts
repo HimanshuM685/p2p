@@ -189,7 +189,9 @@ export const PeerConnection = {
                                 fileId: fileId
                             });
                             currentChunk++;
-                            onProgress((currentChunk / totalChunks) * 100);
+                            const progress = (currentChunk / totalChunks) * 100;
+                            console.log(`Progress: ${progress}%`);
+                            onProgress(progress);
                             setTimeout(sendChunk, 100);
                         } else {
                             reject(new Error("Connection lost"));
@@ -200,6 +202,7 @@ export const PeerConnection = {
                                 dataType: DataType.FILE_COMPLETE,
                                 fileId: fileId
                             });
+                            onProgress(100); 
                             resolve();
                         } else {
                             reject(new Error("Connection lost"));

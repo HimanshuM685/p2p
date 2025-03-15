@@ -1,6 +1,5 @@
 import download from "js-file-download";
 
-
 interface ChunkedFile {
     fileName: string;
     fileType: string;
