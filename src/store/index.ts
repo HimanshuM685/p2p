@@ -1,6 +1,6 @@
 import {configureStore} from '@reduxjs/toolkit'
 import {PeerReducer} from "./peer/peerReducer";
-import {ConnectionReducer} from "./connection/connectionReducer";
+import ConnectionReducer from "./connection/connectionReducer";
 
 export const store = configureStore({
     reducer: {
