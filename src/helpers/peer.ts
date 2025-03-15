@@ -1,9 +1,6 @@
 import Peer, { DataConnection, PeerErrorType, PeerError } from "peerjs";
 import { message } from "antd";
 import { EncryptionManager } from "./encryption";
-import download from 'downloadjs';
-
-
 export enum DataType {
     FILE = 'FILE',
     FILE_CHUNK = 'FILE_CHUNK',
@@ -140,7 +137,7 @@ export const PeerConnection = {
             });
         }
     },
-    sendConnection: (id: string, data: Data, onProgress: (progress: number) => void): Promise<void> => new Promise(async (resolve, reject) => {
+    sendConnection: (id: string, data: Data, onProgress: (progress: number) => void): Promise<void> => new Promise((resolve, reject) => {
         if (!connectionMap.has(id)) {
             reject(new Error("Connection didn't exist"));
             return;
@@ -151,18 +148,66 @@ export const PeerConnection = {
                 reject(new Error("Connection didn't exist"));
                 return;
             }
-
-            if (data.dataType === DataType.KEY_EXCHANGE) {
+            
+            if (data.dataType === DataType.FILE && data.encrypted && data.file) {
                 conn.send(data);
-                onProgress(100); // Key exchange is 100% complete
+                onProgress(100);
                 resolve();
                 return;
             }
+            
+            const chunkSize = 16 * 1024;
+            
+            if (data.dataType === DataType.FILE && data.file && data.file.size > chunkSize) {
+                const file = data.file as Blob;
+                const totalChunks = Math.ceil(file.size / chunkSize);
+                let currentChunk = 0;
+               
+                
+                const fileId = Math.random().toString(36).substring(2, 10);
+                
+                conn.send({
+                    dataType: DataType.FILE_CHUNK,
+                    fileName: data.fileName,
+                    fileType: data.fileType,
+                    fileId: fileId,
+                    totalChunks: totalChunks
+                });
+                
+                const sendChunk = () => {
+                    if (currentChunk < totalChunks) {
+                        const start = currentChunk * chunkSize;
+                        const end = Math.min(start + chunkSize, file.size);
+                        const chunk = file.slice(start, end);
+                        
+                        if (conn) {
+                            conn.send({
+                                dataType: DataType.FILE_CHUNK,
+                                file: chunk,
+                                chunkIndex: currentChunk,
+                                totalChunks: totalChunks,
+                                fileId: fileId
+                            });
+                            currentChunk++;
+                            onProgress((currentChunk / totalChunks) * 100);
+                            setTimeout(sendChunk, 100);
+                        } else {
+                            reject(new Error("Connection lost"));
+                        }
+                    } else {
+                        if (conn) {  
+                            conn.send({
+                                dataType: DataType.FILE_COMPLETE,
+                                fileId: fileId
+                            });
+                            resolve();
+                        } else {
+                            reject(new Error("Connection lost"));
+                        }
+                    }
+                };
 
-            if (data.dataType === DataType.FILE && data.file) {
-                conn.send(data);
-                onProgress(100); // File transfer is 100% complete
-                resolve();
+                sendChunk();
             } else {
                 conn.send(data);
                 onProgress(100);
@@ -181,42 +226,63 @@ export const PeerConnection = {
         }
         let conn = connectionMap.get(id);
         if (conn) {
-            conn.on('data', async function (receivedData) {
+            conn.on('data', function (receivedData) {
                 console.log("Receiving data from " + id);
                 const data = receivedData as Data;
 
                 if (data.dataType === DataType.KEY_EXCHANGE && data.encryptionKey) {
-                    const encryptionManager = EncryptionManager.getInstance();
-                    let keyBuffer = data.encryptionKey;
-                    if (!(keyBuffer instanceof ArrayBuffer)) {
-                        if (keyBuffer) {
-                            keyBuffer = Uint8Array.from(Object.values(keyBuffer)).buffer;
-                        } else {
-                            throw new Error("Encryption key is undefined");
+                    (async () => {
+                        const encryptionManager = EncryptionManager.getInstance();
+                        let keyBuffer = data.encryptionKey;
+                        if (!(keyBuffer instanceof ArrayBuffer)) {
+                            if (keyBuffer) {
+                                keyBuffer = Uint8Array.from(Object.values(keyBuffer)).buffer;
+                            } else {
+                                throw new Error("Encryption key is undefined");
+                            }
                         }
-                    }
-                    const importedKey = await encryptionManager.importKey(keyBuffer);
-                    encryptionManager.storeKeyForPeer(id, importedKey);
-                    message.info(`Received encryption key for file "${data.fileName}"`);
+                        const importedKey = await encryptionManager.importKey(keyBuffer);
+                        encryptionManager.storeKeyForPeer(id, importedKey);
+                        message.info(`Received encryption key for file "${data.fileName}"`);
+                    })();
                 }
-                else if (data.dataType === DataType.FILE && data.file) {
-                    const encryptionManager = EncryptionManager.getInstance();
-                    const key = encryptionManager.getKeyForPeer(id);
-                    if (!key) {
-                        throw new Error("Encryption key not found for peer");
-                    }
-                    const arrayBuffer = await data.file.arrayBuffer();
-                    if (!data.iv) {
-                        throw new Error("Initialization vector (iv) is undefined");
-                    }
-                    if (data.iv) {
-                        const decryptedData = await encryptionManager.decryptData(arrayBuffer, data.iv, key);
-                        const decryptedBlob = new Blob([decryptedData], { type: data.fileType });
-                        message.info(`Receiving file "${data.fileName}" from ${id}`);
-                        download(decryptedBlob, data.fileName || "fileName", data.fileType);
-                    } else {
-                        console.error("Initialization vector (iv) is undefined");
-                    }
+                else if (data.dataType === DataType.FILE && data.encrypted && data.iv && data.file) {
+                    (async () => {
+                        const encryptionManager = EncryptionManager.getInstance();
+                        let iv = data.iv;
+                        if (!(iv instanceof Uint8Array)) {
+                            if (iv) {
+                                iv = new Uint8Array(Object.values(iv));
+                            } else {
+                                throw new Error("Initialization vector (iv) is undefined");
+                            }
+                        }
+                        const key = encryptionManager.getKeyForPeer(id);
+                        if (key) {
+                            if (!data.file) {
+                                throw new Error("File is undefined");
+                            }
+                            const fileBlob = (typeof data.file.arrayBuffer === "function")
+                                ? data.file
+                                : new Blob([data.file], { type: data.fileType });
+                            try {
+                                if (!fileBlob) {
+                                    throw new Error("File blob is undefined");
+                                }
+                                const fileBuffer = await fileBlob.arrayBuffer();
+                                const decryptedBuffer = await encryptionManager.decryptData(fileBuffer, iv, key);
+                                const decryptedBlob = new Blob([decryptedBuffer], { type: data.fileType });
+                                import("js-file-download").then(({ default: download }) => {
+                                    download(decryptedBlob, data.fileName || "file", data.fileType);
+                                });
+                            } catch (err) {
+                                console.error("Decryption failed", err);
+                                message.error("Error decrypting file");
+                            }
+                        } else {
+                            message.error("Encryption key not found for peer " + id);
+                        }
+                    })();
                 } else {
                     callback(data);
                 }
