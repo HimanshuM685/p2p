@@ -55,7 +55,6 @@ export class FileChunkManager {
         
         if (file.receivedChunks.size !== file.totalChunks) return false;
         
-        // Sort chunks by index
         const sortedChunks: Blob[] = [];
         for (let i = 0; i < file.totalChunks; i++) {
             const chunk = file.receivedChunks.get(i);
@@ -67,13 +66,10 @@ export class FileChunkManager {
             }
         }
         
-        // Combine chunks into a single blob
         const completeFile = new Blob(sortedChunks, { type: file.fileType });
         
-        // Download the complete file
         download(completeFile, file.fileName, file.fileType);
-        
-        // Clean up
+
         this.fileChunks.delete(fileId);
         
         return true;

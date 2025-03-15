@@ -1,12 +1,11 @@
 import Peer, { DataConnection, PeerErrorType, PeerError } from "peerjs";
 import { message } from "antd";
-import { EncryptionManager } from "./encryption";  // <-- import encryption
-
+import { EncryptionManager } from "./encryption";
 export enum DataType {
     FILE = 'FILE',
     FILE_CHUNK = 'FILE_CHUNK',
     FILE_COMPLETE = 'FILE_COMPLETE',
-    KEY_EXCHANGE = 'KEY_EXCHANGE',  // New type for key exchange
+    KEY_EXCHANGE = 'KEY_EXCHANGE',
     OTHER = 'OTHER'
 }
 
@@ -16,14 +15,14 @@ export interface Data {
     fileName?: string;
     fileType?: string;
     message?: string;
-    // Chunk metadata
+
     chunkIndex?: number;
     totalChunks?: number;
-    fileId?: string; // To identify chunks belonging to the same file
-    // Encryption related fields
-    encryptionKey?: ArrayBuffer;  // For key exchange
-    iv?: Uint8Array;              // Initialization vector
-    encrypted?: boolean;          // Flag to indicate if the data is encrypted
+    fileId?: string; 
+    
+    encryptionKey?: ArrayBuffer; 
+    iv?: Uint8Array;             
+    encrypted?: boolean;
 }
 
 let peer: Peer | undefined;
@@ -33,16 +32,22 @@ export const PeerConnection = {
     getPeer: () => peer,
     startPeerSession: () => new Promise<string>((resolve, reject) => {
         try {
-            // Generate a custom short peer ID (8 characters)
             const customId = Math.random().toString(36).substring(2, 10);
             peer = new Peer(customId, {
                 config: {
                     iceServers: [
-                        { urls: 'stun:68.233.112.40:3478' }, // Use Coturn as STUN
+                        { urls: 'stun:stun.l.google.com:19302' },
                         {
-                            urls: 'turn:68.233.112.40:3478',
-                            username: 'turnuser',
-                            credential: 'turn6789'
+                            username: "ksKVyW-J_d72fCeKwYohQfRVx04qpKVzUwEGuISFYpA6MDcOHPdZqDLA2mleFoEMAAAAAGfUhHdIaW1hbnNodU02ODU=",
+                            credential: "2a4354b8-010b-11f0-911e-0242ac140004",
+                            urls: [
+                                "turn:ss-turn2.xirsys.com:80?transport=udp",
+                                "turn:ss-turn2.xirsys.com:3478?transport=udp",
+                                "turn:ss-turn2.xirsys.com:80?transport=tcp",
+                                "turn:ss-turn2.xirsys.com:3478?transport=tcp",
+                                "turns:ss-turn2.xirsys.com:443?transport=tcp",
+                                "turns:ss-turn2.xirsys.com:5349?transport=tcp"
+                            ]
                         }
                     ]
                 }
