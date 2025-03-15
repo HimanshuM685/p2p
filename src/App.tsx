@@ -73,14 +73,16 @@ export const App: React.FC = () => {
                 dataType: DataType.KEY_EXCHANGE,
                 encryptionKey: exportedKey,
                 fileName: file.name
-            }, () => {});  // No progress callback for key exchange
+            }, (p) => {
+                setProgress(p * 0.1); // Assume key exchange is 10% of the total progress
+            });
             
             // encrypt file
             const fileBuffer = await file.arrayBuffer();
             const { encrypted, iv } = await encryptionManager.encryptData(fileBuffer, key);
             const encryptedBlob = new Blob([encrypted], { type: file.type });
             
-            // sending the  encrypted file
+            // sending the encrypted file
             await PeerConnection.sendConnection(connection.selectedId, {
                 dataType: DataType.FILE,
                 file: encryptedBlob,
@@ -89,7 +91,7 @@ export const App: React.FC = () => {
                 iv: iv,
                 encrypted: true
             }, (p) => {
-                setProgress(p);
+                setProgress(10 + p * 0.9); // File transfer is 90% of the total progress
             });
             
             await setSendLoading(false);

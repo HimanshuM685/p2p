@@ -149,9 +149,9 @@ export const PeerConnection = {
                 return;
             }
             
-            if (data.dataType === DataType.FILE && data.encrypted && data.file) {
+            if (data.dataType === DataType.KEY_EXCHANGE) {
                 conn.send(data);
-                onProgress(100);
+                onProgress(100); // Key exchange is 100% complete
                 resolve();
                 return;
             }
@@ -162,8 +162,6 @@ export const PeerConnection = {
                 const file = data.file as Blob;
                 const totalChunks = Math.ceil(file.size / chunkSize);
                 let currentChunk = 0;
-               
-                
                 const fileId = Math.random().toString(36).substring(2, 10);
                 
                 conn.send({
