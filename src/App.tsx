@@ -35,6 +35,8 @@ export const App: React.FC = () => {
     const [fileList, setFileList] = useAsyncState([] as UploadFile[]);
     const [sendLoading, setSendLoading] = useAsyncState(false);
     const [progress, setProgress] = useState(0);
+    const [speed, setSpeed] = useState(0);
+    const [startTime, setStartTime] = useState<number | null>(null);
 
     const handleStartSession = () => {
         dispatch(startPeer());
@@ -80,6 +82,9 @@ export const App: React.FC = () => {
             const { encrypted, iv } = await encryptionManager.encryptData(fileBuffer, key);
             const encryptedBlob = new Blob([encrypted], { type: file.type });
             
+            // Set start time for speed calculation
+            setStartTime(Date.now());
+
             // Send encrypted file
             await PeerConnection.sendConnection(connection.selectedId, {
                 dataType: DataType.FILE,
@@ -90,6 +95,9 @@ export const App: React.FC = () => {
                 encrypted: true
             }, (p) => {
                 setProgress(p);
+                const elapsedTime = (Date.now() - (startTime || Date.now())) / 1000; // in seconds
+                const speed = (file.size * (p / 100)) / elapsedTime; // bytes per second
+                setSpeed(speed);
             });
             
             await setSendLoading(false);
@@ -163,7 +171,12 @@ export const App: React.FC = () => {
                             >
                                 {sendLoading ? 'Sending' : 'Send'}
                             </Button>
-                            {sendLoading && <Progress percent={progress} />}
+                            {sendLoading && (
+                                <>
+                                    <Progress percent={progress} />
+                                    <div>Speed: {(speed / 1024).toFixed(2)} KB/s</div>
+                                </>
+                            )}
                         </Card>
                     </div>
                 </Card>
