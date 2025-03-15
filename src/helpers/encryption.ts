@@ -16,9 +16,6 @@ export class EncryptionManager {
    * Generate a new AES-GCM key for encryption
    */
   public async generateKey(): Promise<CryptoKey> {
-    if (!window.crypto || !window.crypto.subtle) {
-      throw new Error("Web Crypto API is not supported in this browser.");
-    }
     return window.crypto.subtle.generateKey(
       {
         name: "AES-GCM",
@@ -33,9 +30,6 @@ export class EncryptionManager {
    * Export a key to send to peer
    */
   public async exportKey(key: CryptoKey): Promise<ArrayBuffer> {
-    if (!window.crypto || !window.crypto.subtle) {
-      throw new Error("Web Crypto API is not supported in this browser.");
-    }
     return window.crypto.subtle.exportKey("raw", key);
   }
   
@@ -43,9 +37,6 @@ export class EncryptionManager {
    * Import a key received from peer
    */
   public async importKey(keyData: ArrayBuffer): Promise<CryptoKey> {
-    if (!window.crypto || !window.crypto.subtle) {
-      throw new Error("Web Crypto API is not supported in this browser.");
-    }
     return window.crypto.subtle.importKey(
       "raw",
       keyData,
@@ -76,9 +67,6 @@ export class EncryptionManager {
    * Encrypt data
    */
   public async encryptData(data: ArrayBuffer, key: CryptoKey): Promise<{ encrypted: ArrayBuffer, iv: Uint8Array }> {
-    if (!window.crypto || !window.crypto.subtle) {
-      throw new Error("Web Crypto API is not supported in this browser.");
-    }
     // Generate a random IV
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
     
@@ -101,9 +89,6 @@ export class EncryptionManager {
    * Decrypt data
    */
   public async decryptData(encryptedData: ArrayBuffer, iv: Uint8Array, key: CryptoKey): Promise<ArrayBuffer> {
-    if (!window.crypto || !window.crypto.subtle) {
-      throw new Error("Web Crypto API is not supported in this browser.");
-    }
     return window.crypto.subtle.decrypt(
       {
         name: "AES-GCM",

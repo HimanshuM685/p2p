@@ -45,7 +45,8 @@ export const PeerConnection = {
                             credential: 'turn6789'
                         }
                     ]
-                }});
+                }
+            });
             peer.on('open', (id) => {
                 console.log('My ID: ' + id);
                 resolve(id);
