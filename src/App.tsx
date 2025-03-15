@@ -6,9 +6,7 @@ import { startPeer, stopPeerSession } from "./store/peer/peerActions";
 import * as connectionAction from "./store/connection/connectionActions";
 import { DataType, PeerConnection } from "./helpers/peer";
 import { useAsyncState } from "./helpers/hooks";
-import { EncryptionManager } from "./helpers/encryption";
-import { ConnectionState } from "./store/connection/connectionTypes";
-import { RootState } from "./store";
+import { EncryptionManager } from "./helpers/encryption";  // <-- import encryption
 
 const { Title } = Typography;
 type MenuItem = Required<MenuProps>['items'][number];
@@ -30,14 +28,13 @@ function getItem(
 }
 
 export const App: React.FC = () => {
-    const peer = useAppSelector((state: RootState) => state.peer);
-    const connection = useAppSelector((state: RootState) => state.connection);
+    const peer = useAppSelector((state) => state.peer);
+    const connection = useAppSelector((state) => state.connection);
     const dispatch = useAppDispatch();
 
     const [fileList, setFileList] = useAsyncState([] as UploadFile[]);
     const [sendLoading, setSendLoading] = useAsyncState(false);
     const [progress, setProgress] = useState(0);
-    const [showProgress, setShowProgress] = useState(false);
 
     const handleStartSession = () => {
         dispatch(startPeer());
@@ -49,16 +46,7 @@ export const App: React.FC = () => {
     };
 
     const handleConnectOtherPeer = () => {
-        const peerId = connection.id?.trim();
-        if (!peerId) {
-            message.warning("Please enter a valid Peer ID");
-            return;
-        }
-        if (peerId === peer.id) {
-            message.warning("Cannot connect to yourself");
-            return;
-        }
-        dispatch(connectionAction.connectPeer(peerId));
+        connection.id != null ? dispatch(connectionAction.connectPeer(connection.id || "")) : message.warning("Please enter ID");
     };
 
     const handleUpload = async () => {
@@ -71,8 +59,6 @@ export const App: React.FC = () => {
             return;
         }
         try {
-            setProgress(0);
-            setShowProgress(true);
             await setSendLoading(true);
             const encryptionManager = EncryptionManager.getInstance();
             const file = fileList[0] as unknown as File;
@@ -103,20 +89,13 @@ export const App: React.FC = () => {
                 iv: iv,
                 encrypted: true
             }, (p) => {
-                setProgress(Math.round(p));
+                setProgress(p);
             });
             
             await setSendLoading(false);
-            // Keep progress bar visible for a moment after completion
-            setTimeout(() => {
-                setShowProgress(false);
-                setProgress(0);
-            }, 1000);
-            message.success("File sent successfully");
+            message.info("Send file successfully");
         } catch (err) {
             await setSendLoading(false);
-            setShowProgress(false);
-            setProgress(0);
             console.log(err);
             message.error("Error when sending file");
         }
@@ -160,13 +139,7 @@ export const App: React.FC = () => {
                                         Select a connection
                                         <Menu selectedKeys={connection.selectedId ? [connection.selectedId] : []}
                                             onSelect={(item) => dispatch(connectionAction.selectItem(item.key))}
-                                            items={connection.list.map((e: string) => getItem(e, e, null))} />
-                                        {connection.showReceiveProgress && (
-                                            <div style={{ marginTop: 16 }}>
-                                                <div>Receiving file...</div>
-                                                <Progress percent={connection.receiveProgress} status={connection.receiveProgress === 100 ? "success" : "active"} />
-                                            </div>
-                                        )}
+                                            items={connection.list.map(e => getItem(e, e, null))} />
                                     </div>
                             }
 
@@ -190,11 +163,7 @@ export const App: React.FC = () => {
                             >
                                 {sendLoading ? 'Sending' : 'Send'}
                             </Button>
-                            {showProgress && (
-                                <div style={{ marginTop: 16 }}>
-                                    <Progress percent={progress} status={progress === 100 ? "success" : "active"} />
-                                </div>
-                            )}
+                            {sendLoading && <Progress percent={progress} />}
                         </Card>
                     </div>
                 </Card>
