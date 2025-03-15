@@ -1,6 +1,7 @@
 import Peer, { DataConnection, PeerErrorType, PeerError } from "peerjs";
 import { message } from "antd";
 import { EncryptionManager } from "./encryption";
+import { FileChunkManager } from "./fileChunkManager";
 export enum DataType {
     FILE = 'FILE',
     FILE_CHUNK = 'FILE_CHUNK',
@@ -247,43 +248,36 @@ export const PeerConnection = {
                         message.info(`Received encryption key for file "${data.fileName}"`);
                     })();
                 }
-                else if (data.dataType === DataType.FILE && data.encrypted && data.iv && data.file) {
-                    (async () => {
-                        const encryptionManager = EncryptionManager.getInstance();
-                        let iv = data.iv;
-                        if (!(iv instanceof Uint8Array)) {
-                            if (iv) {
-                                iv = new Uint8Array(Object.values(iv));
+                else if (data.dataType === DataType.FILE_CHUNK && data.fileId) {
+                    const fileManager = FileChunkManager.getInstance();
+                    if (data.chunkIndex === undefined && data.totalChunks) {
+                        fileManager.initFileTransfer(
+                            data.fileId,
+                            data.fileName || "unknown",
+                            data.fileType || "application/octet-stream",
+                            data.totalChunks
+                        );
+                        message.info(`Starting to receive "${data.fileName}" from ${id}`);
+                    } else if (data.chunkIndex !== undefined && data.file) {
+                        const isComplete = fileManager.addChunk(data.fileId, data.chunkIndex, data.file);
+                        if (data.totalChunks && data.totalChunks > 10) {
+                            const progress = Math.round((data.chunkIndex / data.totalChunks) * 100);
+                            if (progress % 2 === 0) { // for every 2% progress
+                                message.info(`Receiving "${data.fileName}": ${progress}% complete`);
+                            }
+                        }
+                    }
+                }
+                else if (data.dataType === DataType.FILE_COMPLETE && data.fileId) {
+                    const fileManager = FileChunkManager.getInstance();
+                    fileManager.assembleAndDownloadFile(data.fileId)
+                        .then(success => {
+                            if (success) {
+                                message.success(`File "${data.fileName}" downloaded successfully`);
                             } else {
-                                throw new Error("Initialization vector (iv) is undefined");
+                                message.error(`Error downloading file "${data.fileName}"`);
                             }
-                        }
-                        const key = encryptionManager.getKeyForPeer(id);
-                        if (key) {
-                            if (!data.file) {
-                                throw new Error("File is undefined");
-                            }
-                            const fileBlob = (typeof data.file.arrayBuffer === "function")
-                                ? data.file
-                                : new Blob([data.file], { type: data.fileType });
-                            try {
-                                if (!fileBlob) {
-                                    throw new Error("File blob is undefined");
-                                }
-                                const fileBuffer = await fileBlob.arrayBuffer();
-                                const decryptedBuffer = await encryptionManager.decryptData(fileBuffer, iv, key);
-                                const decryptedBlob = new Blob([decryptedBuffer], { type: data.fileType });
-                                import("js-file-download").then(({ default: download }) => {
-                                    download(decryptedBlob, data.fileName || "file", data.fileType);
-                                });
-                            } catch (err) {
-                                console.error("Decryption failed", err);
-                                message.error("Error decrypting file");
-                            }
-                        } else {
-                            message.error("Encryption key not found for peer " + id);
-                        }
-                    })();
+                        });
                 } else {
                     callback(data);
                 }
