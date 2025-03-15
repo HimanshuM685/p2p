@@ -208,10 +208,14 @@ export const PeerConnection = {
                     if (!data.iv) {
                         throw new Error("Initialization vector (iv) is undefined");
                     }
-                    const decryptedData = await encryptionManager.decryptData(arrayBuffer, data.iv, key);
-                    const decryptedBlob = new Blob([decryptedData], { type: data.fileType });
-                    message.info(`Receiving file "${data.fileName}" from ${id}`);
-                    download(decryptedBlob, data.fileName || "fileName", data.fileType);
+                    if (data.iv) {
+                        const decryptedData = await encryptionManager.decryptData(arrayBuffer, data.iv, key);
+                        const decryptedBlob = new Blob([decryptedData], { type: data.fileType });
+                        message.info(`Receiving file "${data.fileName}" from ${id}`);
+                        download(decryptedBlob, data.fileName || "fileName", data.fileType);
+                    } else {
+                        console.error("Initialization vector (iv) is undefined");
+                    }
                 } else {
                     callback(data);
                 }

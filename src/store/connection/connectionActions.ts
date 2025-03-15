@@ -50,12 +50,16 @@ export const connectPeer: (id: string) => (dispatch: Dispatch) => Promise<void>
                         throw new Error("Initialization vector (iv) is undefined");
                     }
                     arrayBuffer.then(buffer => {
-                        encryptionManager.decryptData(buffer, data.iv, key).then(decryptedData => {
-                            const decryptedBlob = new Blob([decryptedData], { type: data.fileType });
-                            fileManager.downloadFile(decryptedBlob, data.fileName || "fileName", data.fileType);
-                        }).catch(err => {
-                            console.error("Error decrypting file data:", err);
-                        });
+                        if (data.iv) {
+                            encryptionManager.decryptData(buffer, data.iv, key).then(decryptedData => {
+                                const decryptedBlob = new Blob([decryptedData], { type: data.fileType });
+                                fileManager.downloadFile(decryptedBlob, (data.fileName || "defaultFileName"), DataType.FILE);
+                            }).catch(err => {
+                                console.error("Error decrypting file data:", err);
+                            });
+                        } else {
+                            console.error("Initialization vector (iv) is undefined");
+                        }
                     }).catch(err => {
                         console.error("Error reading file data:", err);
                     });
