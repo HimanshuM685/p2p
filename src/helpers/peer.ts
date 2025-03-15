@@ -7,6 +7,7 @@ export enum DataType {
     FILE_CHUNK = 'FILE_CHUNK',
     FILE_COMPLETE = 'FILE_COMPLETE',
     KEY_EXCHANGE = 'KEY_EXCHANGE',  // New type for key exchange
+    HEARTBEAT = 'HEARTBEAT',  // New type for heartbeat
     OTHER = 'OTHER'
 }
 
@@ -28,6 +29,20 @@ export interface Data {
 
 let peer: Peer | undefined;
 let connectionMap: Map<string, DataConnection> = new Map<string, DataConnection>();
+let heartbeatInterval: NodeJS.Timeout | undefined;
+
+const startHeartbeat = (conn: DataConnection) => {
+    heartbeatInterval = setInterval(() => {
+        conn.send({ dataType: DataType.HEARTBEAT });
+    }, 30000); // Send heartbeat every 30 seconds
+};
+
+const stopHeartbeat = () => {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = undefined;
+    }
+};
 
 export const PeerConnection = {
     getPeer: () => peer,
@@ -89,11 +104,15 @@ export const PeerConnection = {
                     console.log("Connect to: " + id);
                     connectionMap.set(id, conn);
                     peer?.removeListener('error', handlePeerError);
+                    startHeartbeat(conn);  // Start heartbeat
                     resolve();
                 }).on('error', function (err) {
                     console.log(err);
                     peer?.removeListener('error', handlePeerError);
+                    stopHeartbeat();  // Stop heartbeat on error
                     reject(err);
+                }).on('close', function () {
+                    stopHeartbeat();  // Stop heartbeat on close
                 });
 
                 const handlePeerError = (err: PeerError<`${PeerErrorType}`>) => {
@@ -227,6 +246,10 @@ export const PeerConnection = {
             conn.on('data', function (receivedData) {
                 console.log("Receiving data from " + id);
                 const data = receivedData as Data;
+                if (data.dataType === DataType.HEARTBEAT) {
+                    console.log("Received heartbeat from " + id);
+                    return;  // Ignore heartbeat messages
+                }
                 // Handle key exchange
                 if (data.dataType === DataType.KEY_EXCHANGE && data.encryptionKey) {
                     (async () => {
