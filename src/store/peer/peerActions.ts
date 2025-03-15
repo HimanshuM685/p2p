@@ -34,9 +34,13 @@ export const startPeer: () => (dispatch: Dispatch) => Promise<void>
                 const fileManager = FileChunkManager.getInstance();
                 
                 if (data.dataType === DataType.FILE) {
-                    // for small files
                     message.info("Receiving file " + data.fileName + " from " + peerId)
-                    fileManager.downloadFile(data.file, data.fileName || "fileName", data.fileType);
+                    if (data.file) {
+                        const fileBlob = new Blob([data.file], { type: data.fileType });
+                        fileManager.downloadFile(fileBlob, data.fileName || "fileName", DataType.FILE);
+                    } else {
+                        console.error("Received file data is undefined");
+                    }
                 }
             })
         })

@@ -3,6 +3,7 @@ import { message } from "antd";
 import { EncryptionManager } from "./encryption";
 import download from 'downloadjs';
 
+
 export enum DataType {
     FILE = 'FILE',
     FILE_CHUNK = 'FILE_CHUNK',

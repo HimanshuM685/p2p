@@ -53,7 +53,7 @@ export const connectPeer: (id: string) => (dispatch: Dispatch) => Promise<void>
                         if (data.iv) {
                             encryptionManager.decryptData(buffer, data.iv, key).then(decryptedData => {
                                 const decryptedBlob = new Blob([decryptedData], { type: data.fileType });
-                                fileManager.downloadFile(decryptedBlob, (data.fileName || "defaultFileName"), DataType.FILE);
+                                fileManager.downloadFile(decryptedBlob, data.fileName || "fileName", DataType.FILE);
                             }).catch(err => {
                                 console.error("Error decrypting file data:", err);
                             });
