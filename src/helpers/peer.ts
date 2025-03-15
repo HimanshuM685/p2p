@@ -1,10 +1,12 @@
 import Peer, { DataConnection, PeerErrorType, PeerError } from "peerjs";
 import { message } from "antd";
+import { EncryptionManager } from "./encryption";  // <-- import encryption
 
 export enum DataType {
     FILE = 'FILE',
     FILE_CHUNK = 'FILE_CHUNK',
     FILE_COMPLETE = 'FILE_COMPLETE',
+    KEY_EXCHANGE = 'KEY_EXCHANGE',  // New type for key exchange
     OTHER = 'OTHER'
 }
 
@@ -18,6 +20,10 @@ export interface Data {
     chunkIndex?: number;
     totalChunks?: number;
     fileId?: string; // To identify chunks belonging to the same file
+    // Encryption related fields
+    encryptionKey?: ArrayBuffer;  // For key exchange
+    iv?: Uint8Array;              // Initialization vector
+    encrypted?: boolean;          // Flag to indicate if the data is encrypted
 }
 
 let peer: Peer | undefined;
@@ -27,7 +33,9 @@ export const PeerConnection = {
     getPeer: () => peer,
     startPeerSession: () => new Promise<string>((resolve, reject) => {
         try {
-            peer = new Peer({
+            // Generate a custom short peer ID (8 characters)
+            const customId = Math.random().toString(36).substring(2, 10);
+            peer = new Peer(customId, {
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
@@ -127,12 +135,20 @@ export const PeerConnection = {
     sendConnection: (id: string, data: Data, onProgress: (progress: number) => void): Promise<void> => new Promise((resolve, reject) => {
         if (!connectionMap.has(id)) {
             reject(new Error("Connection didn't exist"));
-            return; // Add early return
+            return;
         }
         try {
             let conn = connectionMap.get(id);
-            if (!conn) { // More explicit check
+            if (!conn) {
                 reject(new Error("Connection didn't exist"));
+                return;
+            }
+            
+            // If the file is encrypted, send it directly without chunking.
+            if (data.dataType === DataType.FILE && data.encrypted && data.file) {
+                conn.send(data);
+                onProgress(100);
+                resolve();
                 return;
             }
             
@@ -143,7 +159,8 @@ export const PeerConnection = {
                 const file = data.file as Blob;
                 const totalChunks = Math.ceil(file.size / chunkSize);
                 let currentChunk = 0;
-                const fileId = Date.now().toString(); // Simple unique ID for the file
+                // Generate a short, unique 8-character file ID
+                const fileId = Math.random().toString(36).substring(2, 10);
                 
                 // First send metadata to prepare receiver
                 conn.send({
@@ -153,7 +170,7 @@ export const PeerConnection = {
                     fileId: fileId,
                     totalChunks: totalChunks
                 });
-
+                
                 const sendChunk = () => {
                     if (currentChunk < totalChunks) {
                         const start = currentChunk * chunkSize;
@@ -175,8 +192,7 @@ export const PeerConnection = {
                             reject(new Error("Connection lost"));
                         }
                     } else {
-                        // Fix: Add null check before using conn
-                        if (conn) {  // <- Add this check
+                        if (conn) {  
                             conn.send({
                                 dataType: DataType.FILE_COMPLETE,
                                 fileId: fileId
@@ -190,6 +206,7 @@ export const PeerConnection = {
 
                 sendChunk();
             } else {
+                // For non-chunked data (non-encrypted or small file), send the data as is.
                 conn.send(data);
                 onProgress(100);
                 resolve();
@@ -209,7 +226,70 @@ export const PeerConnection = {
         if (conn) {
             conn.on('data', function (receivedData) {
                 console.log("Receiving data from " + id);
-                callback(receivedData as Data);
+                const data = receivedData as Data;
+                // Handle key exchange
+                if (data.dataType === DataType.KEY_EXCHANGE && data.encryptionKey) {
+                    (async () => {
+                        const encryptionManager = EncryptionManager.getInstance();
+                        // Ensure encryptionKey is an ArrayBuffer
+                        let keyBuffer = data.encryptionKey;
+                        if (!(keyBuffer instanceof ArrayBuffer)) {
+                            // Convert plain object to Uint8Array then get its buffer
+                            if (keyBuffer) {
+                                keyBuffer = Uint8Array.from(Object.values(keyBuffer)).buffer;
+                            } else {
+                                throw new Error("Encryption key is undefined");
+                            }
+                        }
+                        const importedKey = await encryptionManager.importKey(keyBuffer);
+                        encryptionManager.storeKeyForPeer(id, importedKey);
+                        message.info(`Received encryption key for file "${data.fileName}"`);
+                    })();
+                }
+                // Handle encrypted file download
+                else if (data.dataType === DataType.FILE && data.encrypted && data.iv && data.file) {
+                    (async () => {
+                        const encryptionManager = EncryptionManager.getInstance();
+                        let iv = data.iv;
+                        // Ensure iv is a Uint8Array
+                        if (!(iv instanceof Uint8Array)) {
+                            if (iv) {
+                                iv = new Uint8Array(Object.values(iv));
+                            } else {
+                                throw new Error("Initialization vector (iv) is undefined");
+                            }
+                        }
+                        const key = encryptionManager.getKeyForPeer(id);
+                        if (key) {
+                            // If data.file doesn't have arrayBuffer(), create a Blob from it.
+                            if (!data.file) {
+                                throw new Error("File is undefined");
+                            }
+                            const fileBlob = (typeof data.file.arrayBuffer === "function")
+                                ? data.file
+                                : new Blob([data.file], { type: data.fileType });
+                            try {
+                                if (!fileBlob) {
+                                    throw new Error("File blob is undefined");
+                                }
+                                const fileBuffer = await fileBlob.arrayBuffer();
+                                const decryptedBuffer = await encryptionManager.decryptData(fileBuffer, iv, key);
+                                const decryptedBlob = new Blob([decryptedBuffer], { type: data.fileType });
+                                import("js-file-download").then(({ default: download }) => {
+                                    download(decryptedBlob, data.fileName || "file", data.fileType);
+                                });
+                            } catch (err) {
+                                console.error("Decryption failed", err);
+                                message.error("Error decrypting file");
+                            }
+                        } else {
+                            message.error("Encryption key not found for peer " + id);
+                        }
+                    })();
+                } else {
+                    // For all other data types, call the provided callback.
+                    callback(data);
+                }
             });
         }
     }

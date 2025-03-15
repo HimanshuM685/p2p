@@ -6,6 +6,7 @@ import { startPeer, stopPeerSession } from "./store/peer/peerActions";
 import * as connectionAction from "./store/connection/connectionActions";
 import { DataType, PeerConnection } from "./helpers/peer";
 import { useAsyncState } from "./helpers/hooks";
+import { EncryptionManager } from "./helpers/encryption";  // <-- import encryption
 
 const { Title } = Typography;
 type MenuItem = Required<MenuProps>['items'][number];
@@ -59,17 +60,38 @@ export const App: React.FC = () => {
         }
         try {
             await setSendLoading(true);
-            let file = fileList[0] as unknown as File;
-            let blob = new Blob([file], { type: file.type });
-
+            const encryptionManager = EncryptionManager.getInstance();
+            const file = fileList[0] as unknown as File;
+            
+            // Generate key and store for receiver
+            const key = await encryptionManager.generateKey();
+            encryptionManager.storeKeyForPeer(connection.selectedId, key);
+            const exportedKey = await encryptionManager.exportKey(key);
+            
+            // First, send a key exchange message
+            await PeerConnection.sendConnection(connection.selectedId, {
+                dataType: DataType.KEY_EXCHANGE,
+                encryptionKey: exportedKey,
+                fileName: file.name
+            }, () => {});  // No progress callback for key exchange
+            
+            // Encrypt file
+            const fileBuffer = await file.arrayBuffer();
+            const { encrypted, iv } = await encryptionManager.encryptData(fileBuffer, key);
+            const encryptedBlob = new Blob([encrypted], { type: file.type });
+            
+            // Send encrypted file
             await PeerConnection.sendConnection(connection.selectedId, {
                 dataType: DataType.FILE,
-                file: blob,
+                file: encryptedBlob,
                 fileName: file.name,
-                fileType: file.type
-            }, (progress) => {
-                setProgress(progress);
+                fileType: file.type,
+                iv: iv,
+                encrypted: true
+            }, (p) => {
+                setProgress(p);
             });
+            
             await setSendLoading(false);
             message.info("Send file successfully");
         } catch (err) {
