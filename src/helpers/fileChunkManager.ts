@@ -63,7 +63,7 @@ export class FileChunkManager {
         
         const completeFile = new Blob(sortedChunks, { type: file.fileType });
         
-        download(completeFile, file.fileName, file.fileType);
+        this.downloadFile(completeFile, file.fileName, file.fileType);
 
         this.fileChunks.delete(fileId);
         
@@ -72,5 +72,9 @@ export class FileChunkManager {
     
     public cleanupFile(fileId: string): void {
         this.fileChunks.delete(fileId);
+    }
+
+    public downloadFile(file: Blob, fileName: string, fileType: string): void {
+        download(file, fileName, fileType);
     }
 }

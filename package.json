@@ -13,6 +13,7 @@
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "antd": "^5.4.2",
+    "downloadjs": "^1.4.7",
     "js-file-download": "^0.4.12",
     "peerjs": "^1.5.4",
     "react": "^18.2.0",
@@ -50,6 +51,7 @@
     ]
   },
   "devDependencies": {
+    "@types/downloadjs": "^1.4.6",
     "autoprefixer": "^10.4.21",
     "gh-pages": "^5.0.0",
     "postcss": "^8.5.3",

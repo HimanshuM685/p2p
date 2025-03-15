@@ -2,8 +2,8 @@ import {ConnectionActionType} from "./connectionTypes";
 import {Dispatch} from "redux";
 import {DataType, PeerConnection} from "../../helpers/peer";
 import {message} from "antd";
-import download from "js-file-download";
 import { FileChunkManager } from "../../helpers/fileChunkManager";
+import { EncryptionManager } from "../../helpers/encryption";
 
 export const changeConnectionInput = (id: string) => ({
     type: ConnectionActionType.CONNECTION_INPUT_CHANGE, id
@@ -39,40 +39,29 @@ export const connectPeer: (id: string) => (dispatch: Dispatch) => Promise<void>
             
             if (data.dataType === DataType.FILE) {
                 message.info("Receiving file " + data.fileName + " from " + id)
-                download(data.file || '', data.fileName || "fileName", data.fileType)
-            } 
-            else if (data.dataType === DataType.FILE_CHUNK && data.fileId) {
-                if (data.chunkIndex === undefined && data.totalChunks) {
-                    fileManager.initFileTransfer(
-                        data.fileId,
-                        data.fileName || "unknown",
-                        data.fileType || "application/octet-stream",
-                        data.totalChunks
-                    );
-                    message.info(`Starting to receive "${data.fileName}" from ${id}`);
-                }
-
-                else if (data.chunkIndex !== undefined && data.file) {
-                    const isComplete = fileManager.addChunk(data.fileId, data.chunkIndex, data.file);
-                    
-                    if (data.totalChunks && data.totalChunks > 10) {
-                        const progress = Math.round((data.chunkIndex / data.totalChunks) * 100);
-                        if (progress % 2 === 0) { // for every 2% progress
-                            message.info(`Receiving "${data.fileName}": ${progress}% complete`);
-                        }
+                if (data.file) {
+                    const encryptionManager = EncryptionManager.getInstance();
+                    const key = encryptionManager.getKeyForPeer(id);
+                    if (!key) {
+                        throw new Error("Encryption key not found for peer");
                     }
-                }
-            }
-            else if (data.dataType === DataType.FILE_COMPLETE && data.fileId) {
-                const fileManager = FileChunkManager.getInstance();
-                fileManager.assembleAndDownloadFile(data.fileId)
-                    .then(success => {
-                        if (success) {
-                            message.success(`File "${data.fileName}" downloaded successfully`);
-                        } else {
-                            message.error(`Error downloading file "${data.fileName}"`);
-                        }
+                    const arrayBuffer = data.file.arrayBuffer();
+                    if (!data.iv) {
+                        throw new Error("Initialization vector (iv) is undefined");
+                    }
+                    arrayBuffer.then(buffer => {
+                        encryptionManager.decryptData(buffer, data.iv, key).then(decryptedData => {
+                            const decryptedBlob = new Blob([decryptedData], { type: data.fileType });
+                            fileManager.downloadFile(decryptedBlob, data.fileName || "fileName", data.fileType);
+                        }).catch(err => {
+                            console.error("Error decrypting file data:", err);
+                        });
+                    }).catch(err => {
+                        console.error("Error reading file data:", err);
                     });
+                } else {
+                    console.error("Received file data is undefined");
+                }
             }
         })
         
