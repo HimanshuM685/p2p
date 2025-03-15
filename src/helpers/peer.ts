@@ -48,12 +48,11 @@ export const PeerConnection = {
     getPeer: () => peer,
     startPeerSession: () => new Promise<string>((resolve, reject) => {
         try {
-            // Generate a custom short peer ID (8 characters)
             const customId = Math.random().toString(36).substring(2, 10);
             peer = new Peer(customId, {
                 config: {
                     iceServers: [
-                        { urls: 'stun:68.233.112.40:3478' }, // Use Coturn as STUN
+                        { urls: 'stun:68.233.112.40:3478' },
                         {
                             urls: 'turn:68.233.112.40:3478',
                             username: 'turnuser',
