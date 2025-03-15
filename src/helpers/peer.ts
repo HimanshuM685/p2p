@@ -40,9 +40,16 @@ export const PeerConnection = {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         {
-                            urls: 'turn:ss-turn2.xirsys.com:80?transport=udp',
-                            username: 'your-username',
-                            credential: 'your-credential'
+                            username: "ksKVyW-J_d72fCeKwYohQfRVx04qpKVzUwEGuISFYpA6MDcOHPdZqDLA2mleFoEMAAAAAGfUhHdIaW1hbnNodU02ODU=",
+                            credential: "2a4354b8-010b-11f0-911e-0242ac140004",
+                            urls: [
+                                "turn:ss-turn2.xirsys.com:80?transport=udp",
+                                "turn:ss-turn2.xirsys.com:3478?transport=udp",
+                                "turn:ss-turn2.xirsys.com:80?transport=tcp",
+                                "turn:ss-turn2.xirsys.com:3478?transport=tcp",
+                                "turns:ss-turn2.xirsys.com:443?transport=tcp",
+                                "turns:ss-turn2.xirsys.com:5349?transport=tcp"
+                            ]
                         }
                     ]
                 }
